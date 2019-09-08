@@ -16,6 +16,9 @@ struct INSTRUCTION
   uint8_t cycles;
 };
 
+// Forward Dec
+const struct INSTRUCTION* R6502_GetInstructionFromOpCode(uint8_t opCode);
+
 void R6502_Write(uint16_t addr, uint8_t data)
 {
 
@@ -216,11 +219,34 @@ uint8_t ASL(struct R6502* cpu)
   R6502_SetFlag(cpu, _Z_, (temp & 0x00FF) == 0);
   R6502_SetFlag(cpu, _N_, temp & 0x80);
 
-  if ()
+  const struct INSTRUCTION* instructPtr = R6502_GetInstructionFromOpCode(cpu->opcode);
+  if (instructPtr->addrmode == &IMP)
+  {
+    cpu->a = temp & 0x00FF;
+  }
+  else
+  {
+    R6502_Write(cpu->addr_abs, temp & 0x00FF);
+  }
 
   return 0;
 };
-uint8_t BCC(struct R6502* cpu) { return 0; };
+uint8_t BCC(struct R6502* cpu) 
+{
+  if (R6502_GetFlag(cpu, _C_) == 0)
+  {
+    cpu->cycles++;
+    cpu->addr_abs = cpu->pc + cpu->addr_rel;
+
+    if ((cpu->addr_abs & 0xFF00) != (cpu->pc & 0xFF00))
+    {
+      cpu->cycles++;
+    }
+
+    cpu->pc = cpu->addr_abs;
+  }
+  return 0; 
+};
 uint8_t BCS(struct R6502* cpu)
 {
   if (R6502_GetFlag(cpu, _C_) == 1)
@@ -237,14 +263,130 @@ uint8_t BCS(struct R6502* cpu)
   }
   return 0;
 }
-uint8_t BEQ(struct R6502* cpu) { return 0; };
-uint8_t BIT(struct R6502* cpu) { return 0; };
-uint8_t BMI(struct R6502* cpu) { return 0; };
-uint8_t BNE(struct R6502* cpu) { return 0; };
-uint8_t BPL(struct R6502* cpu) { return 0; };
-uint8_t BRK(struct R6502* cpu) { return 0; };
-uint8_t BVC(struct R6502* cpu) { return 0; };
-uint8_t BVS(struct R6502* cpu) { return 0; };
+uint8_t BEQ(struct R6502* cpu) 
+{ 
+  if (R6502_GetFlag(cpu, _Z_) == 1)
+  {
+    cpu->cycles++;
+    cpu->addr_abs = cpu->pc + cpu->addr_rel;
+
+    if ((cpu->addr_abs & 0xFF00) != (cpu->pc & 0xFF00))
+    {
+      cpu->cycles++;
+    }
+
+    cpu->pc = cpu->addr_abs;
+  }
+  return 0; 
+};
+uint8_t BIT(struct R6502* cpu) 
+{
+  R6502_Fetch(cpu);
+  uint8_t temp = cpu->a & cpu->fetched;
+  R6502_SetFlag(cpu, _Z_, (temp & 0x00FF) == 0x00);
+  R6502_SetFlag(cpu, _N_, cpu->fetched & (1 << 7));
+  R6502_SetFlag(cpu, _V_, cpu->fetched & (1 << 6));
+  return 0; 
+};
+uint8_t BMI(struct R6502* cpu) 
+{ 
+  if (R6502_GetFlag(cpu, _N_) == 1)
+  {
+    cpu->cycles++;
+    cpu->addr_abs = cpu->pc + cpu->addr_rel;
+
+    if ((cpu->addr_abs & 0xFF00) != (cpu->pc & 0xFF00))
+    {
+      cpu->cycles++;
+    }
+
+    cpu->pc = cpu->addr_abs;
+  }
+  return 0;
+  return 0; 
+};
+uint8_t BNE(struct R6502* cpu) 
+{
+  if (R6502_GetFlag(cpu, _Z_) == 0)
+  {
+    cpu->cycles++;
+    cpu->addr_abs = cpu->pc + cpu->addr_rel;
+
+    if ((cpu->addr_abs & 0xFF00) != (cpu->pc & 0xFF00))
+    {
+      cpu->cycles++;
+    }
+
+    cpu->pc = cpu->addr_abs;
+  }
+  return 0; 
+};
+uint8_t BPL(struct R6502* cpu) 
+{ 
+  if (R6502_GetFlag(cpu, _N_) == 0)
+  {
+    cpu->cycles++;
+    cpu->addr_abs = cpu->pc + cpu->addr_rel;
+
+    if ((cpu->addr_abs & 0xFF00) != (cpu->pc & 0xFF00))
+    {
+      cpu->cycles++;
+    }
+
+    cpu->pc = cpu->addr_abs;
+  }
+  return 0;
+};
+uint8_t BRK(struct R6502* cpu) 
+{ 
+  cpu->pc++;
+
+  R6502_SetFlag(cpu, _I_, true);
+  R6502_Write(0x0100 + cpu->pStk, (cpu->pc >> 8) & 0x00FF);
+  cpu->pStk--;
+  R6502_Write(0x0100 + cpu->pStk, cpu->pc & 0x00FF);
+  cpu->pStk--;
+
+  R6502_SetFlag(cpu, _B_, true);
+  R6502_Write(0x0100 + cpu->pStk, cpu->status);
+  cpu->pStk--;
+  R6502_SetFlag(cpu, _B_, false);
+
+  cpu->pc = (uint16_t)R6502_Read(0xFFFE) | ((uint16_t)R6502_Read(0xFFFF) << 8);
+  return 0; 
+};
+uint8_t BVC(struct R6502* cpu)
+{ 
+  if (R6502_GetFlag(cpu, _V_) == 0)
+  {
+    cpu->cycles++;
+    cpu->addr_abs = cpu->pc + cpu->addr_rel;
+
+    if ((cpu->addr_abs & 0xFF00) != (cpu->pc & 0xFF00))
+    {
+      cpu->cycles++;
+    }
+
+    cpu->pc = cpu->addr_abs;
+  }
+  return 0;
+};
+uint8_t BVS(struct R6502* cpu) 
+{ 
+  if (R6502_GetFlag(cpu, _V_) == 1)
+  {
+    cpu->cycles++;
+    cpu->addr_abs = cpu->pc + cpu->addr_rel;
+
+    if ((cpu->addr_abs & 0xFF00) != (cpu->pc & 0xFF00))
+    {
+      cpu->cycles++;
+    }
+
+    cpu->pc = cpu->addr_abs;
+  }
+  return 0;
+};
 uint8_t CLC(struct R6502* cpu)
 {
   R6502_SetFlag(cpu, _C_, false);
@@ -265,9 +407,33 @@ uint8_t CLV(struct R6502* cpu)
   R6502_SetFlag(cpu, _V_, false);
   return 0;
 }
-uint8_t CMP(struct R6502* cpu) { return 0; };
-uint8_t CPX(struct R6502* cpu) { return 0; };
-uint8_t CPY(struct R6502* cpu) { return 0; };
+uint8_t CMP(struct R6502* cpu) 
+{ 
+  R6502_Fetch(cpu);
+  uint8_t temp = cpu->a - cpu->fetched;
+  R6502_SetFlag(cpu, _C_, cpu->a >= cpu->fetched);
+  R6502_SetFlag(cpu, _Z_, temp == 0x00);
+  R6502_SetFlag(cpu, _N_, temp & 0x80);
+  return 1; 
+};
+uint8_t CPX(struct R6502* cpu)
+{ 
+  R6502_Fetch(cpu);
+  uint8_t temp = cpu->x - cpu->fetched;
+  R6502_SetFlag(cpu, _C_, cpu->x >= cpu->fetched);
+  R6502_SetFlag(cpu, _Z_, temp == 0x00);
+  R6502_SetFlag(cpu, _N_, temp & 0x80);
+  return 0;
+};
+uint8_t CPY(struct R6502* cpu) 
+{ 
+  R6502_Fetch(cpu);
+  uint8_t temp = cpu->y - cpu->fetched;
+  R6502_SetFlag(cpu, _C_, cpu->y >= cpu->fetched);
+  R6502_SetFlag(cpu, _Z_, temp == 0x00);
+  R6502_SetFlag(cpu, _N_, temp & 0x80);
+  return 0; 
+};
 uint8_t DEC(struct R6502* cpu) { return 0; };
 uint8_t DEX(struct R6502* cpu) { return 0; };
 uint8_t DEY(struct R6502* cpu) { return 0; };
@@ -352,7 +518,10 @@ uint8_t R6502_Fetch(struct R6502* cpu)
   return 0;
 }
 
-struct INSTRUCTION* R6502_LookupOpCode(cpu)
+const struct INSTRUCTION* R6502_GetInstructionFromOpCode(uint8_t opCode)
+{
+  return OpCodeMatrix + (sizeof(struct INSTRUCTION) * opCode);
+}
 
 void R6502_Clock(struct R6502* cpu)
 {
@@ -361,7 +530,7 @@ void R6502_Clock(struct R6502* cpu)
     cpu->opcode = R6502_Read(cpu->pc);
     cpu->pc++;
 
-    struct INSTRUCTION* instructPtr = OpCodeMatrix + (sizeof(struct INSTRUCTION) * cpu->opcode);
+    struct INSTRUCTION* instructPtr = R6502_GetInstructionFromOpCode(cpu->opcode);
     uint8_t additional_addrmode = instructPtr->addrmode();
     uint8_t additional_operate  = instructPtr->operate();
 
