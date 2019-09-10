@@ -1,4 +1,5 @@
 #include "R6502.h"
+#include "Bus.h"
 
 #define _C_ (1<<0) // CARRY BIT
 #define _Z_ (1<<1) // ZERO BIT
@@ -19,14 +20,14 @@ struct INSTRUCTION
 // Forward Dec
 const struct INSTRUCTION* R6502_GetInstructionFromOpCode(uint8_t opCode);
 
-void R6502_Write(uint16_t addr, uint8_t data)
+void R6502_Write(struct R6502* cpu, uint16_t addr, uint8_t data)
 {
-
+  Bus_Write(cpu->bus, addr, data);
 }
 
-uint8_t R6502_Read(uint16_t addr)
+uint8_t R6502_Read(struct R6502* cpu, uint16_t addr)
 {
-  return 0x00;
+  return Bus_Read(cpu->bus, addr);
 }
 
 uint8_t R6502_GetFlag(struct R6502* cpu, uint8_t flag)
@@ -62,28 +63,28 @@ uint8_t IMM(struct R6502* cpu)
 }
 uint8_t ZP0(struct R6502* cpu)
 {
-  cpu->addr_abs = R6502_Read(cpu->pc);
+  cpu->addr_abs = R6502_Read(cpu, cpu->pc);
   cpu->pc++;
   cpu->addr_abs &= 0x00FF;
   return 0;
 }
 uint8_t ZPX(struct R6502* cpu)
 {
-  cpu->addr_abs = (R6502_Read(cpu->pc) + cpu->x);
+  cpu->addr_abs = (R6502_Read(cpu, cpu->pc) + cpu->x);
   cpu->pc++;
   cpu->addr_abs &= 0x00FF;
   return 0;
 }
 uint8_t ZPY(struct R6502* cpu)
 {
-  cpu->addr_abs = (R6502_Read(cpu->pc) + cpu->y);
+  cpu->addr_abs = (R6502_Read(cpu, cpu->pc) + cpu->y);
   cpu->pc++;
   cpu->addr_abs &= 0x00FF;
   return 0;
 }
 uint8_t REL(struct R6502* cpu)
 {
-  cpu->addr_rel = R6502_Read(cpu->pc);
+  cpu->addr_rel = R6502_Read(cpu, cpu->pc);
   cpu->pc++;
 
   if (cpu->addr_rel & 0x80)
@@ -95,9 +96,9 @@ uint8_t REL(struct R6502* cpu)
 }
 uint8_t ABS(struct R6502* cpu)
 {
-  uint16_t low = R6502_Read(cpu->pc);
+  uint16_t low = R6502_Read(cpu, cpu->pc);
   cpu->pc++;
-  uint16_t high = R6502_Read(cpu->pc);
+  uint16_t high = R6502_Read(cpu, cpu->pc);
   cpu->pc++;
 
   cpu->addr_abs = (high << 8) | low;
@@ -106,9 +107,9 @@ uint8_t ABS(struct R6502* cpu)
 }
 uint8_t ABX(struct R6502* cpu)
 {
-  uint16_t low = R6502_Read(cpu->pc);
+  uint16_t low = R6502_Read(cpu, cpu->pc);
   cpu->pc++;
-  uint16_t high = R6502_Read(cpu->pc);
+  uint16_t high = R6502_Read(cpu, cpu->pc);
   cpu->pc++;
 
   cpu->addr_abs = ((high << 8) | low) + cpu->x;
@@ -120,9 +121,9 @@ uint8_t ABX(struct R6502* cpu)
 }
 uint8_t ABY(struct R6502* cpu)
 {
-  uint16_t low = R6502_Read(cpu->pc);
+  uint16_t low = R6502_Read(cpu, cpu->pc);
   cpu->pc++;
-  uint16_t high = R6502_Read(cpu->pc);
+  uint16_t high = R6502_Read(cpu, cpu->pc);
   cpu->pc++;
 
   cpu->addr_abs = ((high << 8) | low) + cpu->y;
@@ -134,9 +135,9 @@ uint8_t ABY(struct R6502* cpu)
 }
 uint8_t IND(struct R6502* cpu)
 {
-  uint16_t ptr_low = R6502_Read(cpu->pc);
+  uint16_t ptr_low = R6502_Read(cpu, cpu->pc);
   cpu->pc++;
-  uint16_t ptr_high = R6502_Read(cpu->pc);
+  uint16_t ptr_high = R6502_Read(cpu, cpu->pc);
   cpu->pc++;
 
   uint16_t ptr = ((ptr_high << 8) | ptr_low);
@@ -144,23 +145,23 @@ uint8_t IND(struct R6502* cpu)
   // Original hardware had a bug we need to emulate here as programs worked around it.
   if (ptr_low == 0xFF00)
   {
-    cpu->addr_abs = (R6502_Read(ptr & 0xFF00) << 8) | R6502_Read(ptr);
+    cpu->addr_abs = (R6502_Read(cpu, ptr & 0xFF00) << 8) | R6502_Read(cpu, ptr);
   }
   // Otherwise, behave normally
   else
   {
-    cpu->addr_abs = (R6502_Read(ptr + 1) << 8) | R6502_Read(ptr);
+    cpu->addr_abs = (R6502_Read(cpu, ptr + 1) << 8) | R6502_Read(cpu, ptr);
   }
 
   return 0;
 }
 uint8_t IZX(struct R6502* cpu)
 {
-  uint16_t temp = R6502_Read(cpu->pc);
+  uint16_t temp = R6502_Read(cpu, cpu->pc);
   cpu->pc++;
 
-  uint16_t low  = R6502_Read((uint16_t)(temp + (uint16_t)cpu->x) & 0x00FF);
-  uint16_t high = R6502_Read((uint16_t)(temp + (uint16_t)cpu->x + 1) & 0x00FF);
+  uint16_t low  = R6502_Read(cpu, (uint16_t)(temp + (uint16_t)cpu->x) & 0x00FF);
+  uint16_t high = R6502_Read(cpu, (uint16_t)(temp + (uint16_t)cpu->x + 1) & 0x00FF);
 
   cpu->addr_abs = (high << 8) | low;
 
@@ -168,11 +169,11 @@ uint8_t IZX(struct R6502* cpu)
 }
 uint8_t IZY(struct R6502* cpu)
 {
-  uint16_t temp = R6502_Read(cpu->pc);
+  uint16_t temp = R6502_Read(cpu, cpu->pc);
   cpu->pc++;
 
-  uint16_t low  = R6502_Read(temp & 0x00FF);
-  uint16_t high = R6502_Read((temp + 1) & 0x00FF);
+  uint16_t low  = R6502_Read(cpu, temp & 0x00FF);
+  uint16_t high = R6502_Read(cpu, (temp + 1) & 0x00FF);
 
   cpu->addr_abs = ((high << 8) | low) + cpu->y;
 
@@ -226,7 +227,7 @@ uint8_t ASL(struct R6502* cpu)
   }
   else
   {
-    R6502_Write(cpu->addr_abs, temp & 0x00FF);
+    R6502_Write(cpu, cpu->addr_abs, temp & 0x00FF);
   }
 
   return 0;
@@ -342,17 +343,17 @@ uint8_t BRK(struct R6502* cpu)
   cpu->pc++;
 
   R6502_SetFlag(cpu, _I_, true);
-  R6502_Write(0x0100 + cpu->pStk, (cpu->pc >> 8) & 0x00FF);
+  R6502_Write(cpu, 0x0100 + cpu->pStk, (cpu->pc >> 8) & 0x00FF);
   cpu->pStk--;
-  R6502_Write(0x0100 + cpu->pStk, cpu->pc & 0x00FF);
+  R6502_Write(cpu, 0x0100 + cpu->pStk, cpu->pc & 0x00FF);
   cpu->pStk--;
 
   R6502_SetFlag(cpu, _B_, true);
-  R6502_Write(0x0100 + cpu->pStk, cpu->status);
+  R6502_Write(cpu, 0x0100 + cpu->pStk, cpu->status);
   cpu->pStk--;
   R6502_SetFlag(cpu, _B_, false);
 
-  cpu->pc = (uint16_t)R6502_Read(0xFFFE) | ((uint16_t)R6502_Read(0xFFFF) << 8);
+  cpu->pc = (uint16_t)R6502_Read(cpu, 0xFFFE) | ((uint16_t)R6502_Read(cpu, 0xFFFF) << 8);
   return 0; 
 };
 uint8_t BVC(struct R6502* cpu)
@@ -438,7 +439,7 @@ uint8_t DEC(struct R6502* cpu)
 { 
   R6502_Fetch(cpu);
   uint8_t temp = cpu->fetched - 1;
-  R6502_Write(cpu->addr_abs, temp);
+  R6502_Write(cpu, cpu->addr_abs, temp);
   R6502_SetFlag(cpu, _Z_, temp == 0x00);
   R6502_SetFlag(cpu, _N_, temp & 0x80);
   return 0; 
@@ -469,7 +470,7 @@ uint8_t INC(struct R6502* cpu)
 { 
   R6502_Fetch(cpu);
   uint8_t temp = cpu->fetched + 1;
-  R6502_Write(cpu->addr_abs, temp);
+  R6502_Write(cpu, cpu->addr_abs, temp);
   R6502_SetFlag(cpu, _Z_, temp == 0x00);
   R6502_SetFlag(cpu, _N_, temp & 0x80);
   return 0; 
@@ -497,9 +498,9 @@ uint8_t JSR(struct R6502* cpu)
 {
   cpu->pc--;
 
-  R6502_Write(0x0100 + cpu->pStk, (cpu->pc >> 8) & 0x00FF);
+  R6502_Write(cpu, 0x0100 + cpu->pStk, (cpu->pc >> 8) & 0x00FF);
   cpu->pStk--;
-  R6502_Write(0x0100 + cpu->pStk, cpu->pc & 0x00FF);
+  R6502_Write(cpu, 0x0100 + cpu->pStk, cpu->pc & 0x00FF);
   cpu->pStk--;
 
   cpu->pc = cpu->addr_abs;
@@ -549,7 +550,7 @@ uint8_t LSR(struct R6502* cpu)
   }
   else
   {
-    R6502_Write(cpu->addr_abs, temp);
+    R6502_Write(cpu, cpu->addr_abs, temp);
   }
 
   return 0; 
@@ -578,13 +579,13 @@ uint8_t ORA(struct R6502* cpu)
 };
 uint8_t PHA(struct R6502* cpu) 
 {
-  R6502_Write(0x0100 + cpu->pStk, cpu->a);
+  R6502_Write(cpu, 0x0100 + cpu->pStk, cpu->a);
   cpu->pStk--;
   return 1; 
 };
 uint8_t PHP(struct R6502* cpu) 
 {
-  R6502_Write(0x0100 + cpu->pStk, cpu->status | R6502_GetFlag(cpu, _B_) | R6502_GetFlag(cpu, _U_));
+  R6502_Write(cpu, 0x0100 + cpu->pStk, cpu->status | R6502_GetFlag(cpu, _B_) | R6502_GetFlag(cpu, _U_));
   R6502_SetFlag(cpu, _B_, false);
   R6502_SetFlag(cpu, _U_, false);
   cpu->pStk--;
@@ -593,7 +594,7 @@ uint8_t PHP(struct R6502* cpu)
 uint8_t PLA(struct R6502* cpu) 
 { 
   cpu->pStk++;
-  cpu->a = R6502_Read(0x0100 + cpu->pStk);
+  cpu->a = R6502_Read(cpu, 0x0100 + cpu->pStk);
   R6502_SetFlag(cpu, _Z_, cpu->a == 0x00);
   R6502_SetFlag(cpu, _N_, cpu->a & 0x80);
   return 0; 
@@ -601,7 +602,7 @@ uint8_t PLA(struct R6502* cpu)
 uint8_t PLP(struct R6502* cpu) 
 {
   cpu->pStk--;
-  cpu->status = R6502_Read(0x100 + cpu->pStk);
+  cpu->status = R6502_Read(cpu, 0x100 + cpu->pStk);
   R6502_SetFlag(cpu, _U_, true);
   return 0; 
 };
@@ -619,7 +620,7 @@ uint8_t ROL(struct R6502* cpu)
   }
   else
   {
-    R6502_Write(cpu->addr_abs, temp & 0x00FF);
+    R6502_Write(cpu, cpu->addr_abs, temp & 0x00FF);
   }
 
   return 0;
@@ -638,7 +639,7 @@ uint8_t ROR(struct R6502* cpu)
   }
   else
   {
-    R6502_Write(cpu->addr_abs, temp & 0x00FF);
+    R6502_Write(cpu, cpu->addr_abs, temp & 0x00FF);
   }
 
   return 0;
@@ -646,22 +647,22 @@ uint8_t ROR(struct R6502* cpu)
 uint8_t RTI(struct R6502* cpu) 
 { 
   cpu->pStk++;
-  cpu->status = R6502_Read(0x0100 + cpu->pStk);
+  cpu->status = R6502_Read(cpu, 0x0100 + cpu->pStk);
   R6502_SetFlag(cpu, _B_, false);
   R6502_SetFlag(cpu, _U_, false);
 
   cpu->pStk++;
-  cpu->pc = (uint16_t)R6502_Read(0x0100 + cpu->pStk);
+  cpu->pc = (uint16_t)R6502_Read(cpu, 0x0100 + cpu->pStk);
   cpu->pStk++;
-  cpu->pc |= (uint16_t)R6502_Read(0x0100 + cpu->pStk) << 8;
+  cpu->pc |= (uint16_t)R6502_Read(cpu, 0x0100 + cpu->pStk) << 8;
   return 0; 
 };
 uint8_t RTS(struct R6502* cpu) 
 {
   cpu->pStk++;
-  cpu->pc = (uint16_t)R6502_Read(0x0100 + cpu->pStk);
+  cpu->pc = (uint16_t)R6502_Read(cpu, 0x0100 + cpu->pStk);
   cpu->pStk++;
-  cpu->pc |= (uint16_t)R6502_Read(0x0100 + cpu->pStk) << 8;
+  cpu->pc |= (uint16_t)R6502_Read(cpu, 0x0100 + cpu->pStk) << 8;
 
   cpu->pc++;
   return 0; 
@@ -698,17 +699,17 @@ uint8_t SEI(struct R6502* cpu)
 };
 uint8_t STA(struct R6502* cpu) 
 { 
-  R6502_Write(cpu->addr_abs, cpu->a);
+  R6502_Write(cpu, cpu->addr_abs, cpu->a);
   return 0; 
 };
 uint8_t STX(struct R6502* cpu)
 { 
-  R6502_Write(cpu->addr_abs, cpu->x);
+  R6502_Write(cpu, cpu->addr_abs, cpu->x);
   return 0; 
 };
 uint8_t STY(struct R6502* cpu)
 { 
-  R6502_Write(cpu->addr_abs, cpu->y);
+  R6502_Write(cpu, cpu->addr_abs, cpu->y);
   return 0; 
 };
 uint8_t TAX(struct R6502* cpu)
@@ -778,11 +779,9 @@ static struct INSTRUCTION OpCodeMatrix[16 * 16] = {
 
 uint8_t R6502_Fetch(struct R6502* cpu)
 {
-  struct INSTRUCTION* instructPtr = OpCodeMatrix + (sizeof(struct INSTRUCTION) * cpu->opcode);
-
-  if (instructPtr->addrmode != &IMP)
+  if (OpCodeMatrix[cpu->opcode].addrmode != &IMP)
   {
-    cpu->fetched = R6502_Read(cpu->addr_abs);
+    cpu->fetched = R6502_Read(cpu, cpu->addr_abs);
   }
 
   return 0;
@@ -790,14 +789,14 @@ uint8_t R6502_Fetch(struct R6502* cpu)
 
 const struct INSTRUCTION* R6502_GetInstructionFromOpCode(uint8_t opCode)
 {
-  return OpCodeMatrix + (sizeof(struct INSTRUCTION) * opCode);
+  return &OpCodeMatrix[opCode];
 }
 
 void R6502_Clock(struct R6502* cpu)
 {
   if (cpu->cycles == 0)
   {
-    cpu->opcode = R6502_Read(cpu->pc);
+    cpu->opcode = R6502_Read(cpu, cpu->pc);
     cpu->pc++;
 
     const struct INSTRUCTION* instructPtr = R6502_GetInstructionFromOpCode(cpu->opcode);
@@ -808,4 +807,68 @@ void R6502_Clock(struct R6502* cpu)
   }
 
   cpu->cycles--;
+}
+
+void R6502_Reset(struct R6502* cpu)
+{
+  cpu->addr_abs = 0xFFFC;
+  uint16_t low  = R6502_Read(cpu, cpu->addr_abs);
+  uint16_t high = R6502_Read(cpu, cpu->addr_abs + 1);
+
+  //cpu->pc = (high << 8) | low;
+  cpu->pc = 0x8000;
+
+  cpu->a = cpu->x = cpu->y = 0;
+  cpu->pStk = 0xFD;
+  cpu->status = 0x00 | R6502_GetFlag(cpu, _U_);
+
+  cpu->addr_abs = cpu->addr_rel = 0x0000;
+  cpu->fetched = 0x00;
+
+  cpu->cycles = 8;
+}
+
+void R6502_IRQ(struct R6502* cpu)
+{
+  if (R6502_GetFlag(cpu, _I_) != 1)
+  {
+    R6502_Write(cpu, 0x0100 + cpu->pStk, (cpu->pc >> 8) & 0x00FF);
+    cpu->pStk--;
+    R6502_Write(cpu, 0x0100 + cpu->pStk, cpu->pc & 0x00FF);
+    cpu->pStk--;
+
+    R6502_SetFlag(cpu, _B_, false);
+    R6502_SetFlag(cpu, _U_, true);
+    R6502_SetFlag(cpu, _I_, true);
+    R6502_Write(cpu, 0x0100 + cpu->pStk, cpu->status);
+    cpu->pStk;
+
+    cpu->addr_abs = 0xFFFE;
+    uint16_t low = R6502_Read(cpu, cpu->addr_abs);
+    uint16_t high = R6502_Read(cpu, cpu->addr_abs + 1);
+    cpu->pc = (high << 8) | low;
+
+    cpu->cycles = 7;
+  }
+}
+
+void R6502_NMI(struct R6502* cpu)
+{
+  R6502_Write(cpu, 0x0100 + cpu->pStk, (cpu->pc >> 8) & 0x00FF);
+  cpu->pStk--;
+  R6502_Write(cpu, 0x0100 + cpu->pStk, cpu->pc & 0x00FF);
+  cpu->pStk--;
+
+  R6502_SetFlag(cpu, _B_, false);
+  R6502_SetFlag(cpu, _U_, true);
+  R6502_SetFlag(cpu, _I_, true);
+  R6502_Write(cpu, 0x0100 + cpu->pStk, cpu->status);
+  cpu->pStk;
+
+  cpu->addr_abs = 0xFFFE;
+  uint16_t low = R6502_Read(cpu, cpu->addr_abs);
+  uint16_t high = R6502_Read(cpu, cpu->addr_abs + 1);
+  cpu->pc = (high << 8) | low;
+
+  cpu->cycles = 8;
 }
