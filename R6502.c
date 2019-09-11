@@ -12,8 +12,8 @@
 
 struct INSTRUCTION
 {
-  uint8_t(*operate)();
-  uint8_t(*addrmode)();
+  uint8_t(*operate)(struct R6502*);
+  uint8_t(*addrmode)(struct R6502*);
   uint8_t cycles;
 };
 
@@ -800,8 +800,8 @@ void R6502_Clock(struct R6502* cpu)
     cpu->pc++;
 
     const struct INSTRUCTION* instructPtr = R6502_GetInstructionFromOpCode(cpu->opcode);
-    uint8_t additional_addrmode = instructPtr->addrmode();
-    uint8_t additional_operate  = instructPtr->operate();
+    uint8_t additional_addrmode = instructPtr->addrmode(cpu);
+    uint8_t additional_operate  = instructPtr->operate(cpu);
 
     cpu->cycles = instructPtr->cycles + (additional_addrmode & additional_operate);
   }
@@ -815,8 +815,7 @@ void R6502_Reset(struct R6502* cpu)
   uint16_t low  = R6502_Read(cpu, cpu->addr_abs);
   uint16_t high = R6502_Read(cpu, cpu->addr_abs + 1);
 
-  //cpu->pc = (high << 8) | low;
-  cpu->pc = 0x8000;
+  cpu->pc = (high << 8) | low;
 
   cpu->a = cpu->x = cpu->y = 0;
   cpu->pStk = 0xFD;
