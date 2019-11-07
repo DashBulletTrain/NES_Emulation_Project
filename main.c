@@ -2,7 +2,7 @@
 
 void main()
 {
-  struct SystemBus cpuBus;
+  SystemBus cpuBus;
   Bus_AttachComponents(&cpuBus);
 
   // Set Resets
@@ -56,7 +56,7 @@ void main()
 
   while (true)
   {
-    R6502_Clock(&cpuBus.cpu);
+    Bus_Clock(&cpuBus);
   }
 
   return;

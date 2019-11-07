@@ -4,7 +4,7 @@
 
 struct SystemBus;
 
-struct R6502
+typedef struct
 {
   uint8_t a;       // Accumulator
   uint8_t x;       // X Register
@@ -20,9 +20,9 @@ struct R6502
   uint8_t cycles;
 
   struct SystemBus* bus;
-};
+} R6502;
 
-void R6502_Clock(struct R6502* cpu);
-void R6502_Reset(struct R6502* cpu);
-void R6502_IRQ(struct R6502* cpu);
-void R6502_NMI(struct R6502* cpu);
+void R6502_Clock(R6502* cpu);
+void R6502_Reset(R6502* cpu);
+void R6502_IRQ(R6502* cpu);
+void R6502_NMI(R6502* cpu);
